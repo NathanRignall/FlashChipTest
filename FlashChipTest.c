@@ -36,13 +36,13 @@ static inline void cs_deselect(uint cs_pin)
     asm volatile("nop \n nop \n nop"); // FIXME
 }
 
-void __not_in_flash_func(flash_read)(spi_inst_t *spi, uint cs_pin, uint32_t addr, uint8_t *buf, size_t len)
+void __not_in_flash_func(flash_read)(spi_inst_t *spi, uint cs_pin, uint32_t addr, uint32_t page, uint8_t *buf, size_t len)
 {
     cs_select(cs_pin);
     uint8_t cmdbuf[4] = {
         FLASH_CMD_READ,
-        addr >> 16,
-        addr >> 8,
+        (page >> 8) & 0xFF,
+        (page >> 0) & 0xFF,
         addr};
     spi_write_blocking(spi, cmdbuf, 4);
     spi_read_blocking(spi, 0, buf, len);
@@ -84,12 +84,12 @@ void __not_in_flash_func(flash_sector_erase)(spi_inst_t *spi, uint cs_pin, uint3
     flash_wait_done(spi, cs_pin);
 }
 
-void __not_in_flash_func(flash_page_program)(spi_inst_t *spi, uint cs_pin, uint32_t addr, uint8_t data[])
+void __not_in_flash_func(flash_page_program)(spi_inst_t *spi, uint cs_pin, uint32_t addr, uint32_t page, uint8_t data[])
 {
     uint8_t cmdbuf[4] = {
         FLASH_CMD_PAGE_PROGRAM,
-        addr >> 16,
-        addr >> 8,
+        (page >> 8) & 0xFF,
+        (page >> 0) & 0xFF,
         addr};
     flash_write_enable(spi, cs_pin);
     cs_select(cs_pin);
@@ -134,25 +134,24 @@ int main()
     flash_sector_erase(SPI_PORT, PIN_CS, 0);
     flash_sector_erase(SPI_PORT, PIN_CS, 256);
 
-    page_buf[0] = 6;
-    page_buf[1] = 8;
-    flash_page_program(SPI_PORT, PIN_CS, 0, page_buf);
-    flash_read(SPI_PORT, PIN_CS, 0, page_buf, FLASH_PAGE_SIZE);
-    printf("After program 0:\n");
+    for (int i = 0; i < FLASH_PAGE_SIZE; ++i)
+        page_buf[i] = i;
+
+    page_buf[200] = 101;
+    page_buf[201] = 102;
+    page_buf[202] = 103;
+    page_buf[203] = 104;
+
+    printf("pre program 0:\n");
     printbuf(page_buf);
+
+    flash_page_program(SPI_PORT, PIN_CS, 0, 0, page_buf);
 
     for (int i = 0; i < FLASH_PAGE_SIZE; ++i)
         page_buf[i] = 0;
+    flash_read(SPI_PORT, PIN_CS, 0, 0, page_buf, FLASH_PAGE_SIZE);
 
-    page_buf[0] = 5;
-    page_buf[1] = 9;
-    flash_page_program(SPI_PORT, PIN_CS, 256, page_buf);
-    flash_read(SPI_PORT, PIN_CS, 256, page_buf, FLASH_PAGE_SIZE);
-    printf("After program 1a:\n");
-    printbuf(page_buf);
-
-    flash_read(SPI_PORT, PIN_CS, 0, page_buf, FLASH_PAGE_SIZE);
-    printf("After program 1b:\n");
+    printf("After program 0:\n");
     printbuf(page_buf);
 
     return 0;
